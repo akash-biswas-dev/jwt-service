@@ -1,4 +1,4 @@
-package com.cromxt.authentication.webflux;
+package com.cromxt.jwt.webflux;
 
 import java.util.Objects;
 
@@ -15,7 +15,7 @@ import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 
-import com.cromxt.authentication.JwtService;
+import com.cromxt.jwt.JwtService;
 
 import io.jsonwebtoken.ExpiredJwtException;
 import lombok.RequiredArgsConstructor;
