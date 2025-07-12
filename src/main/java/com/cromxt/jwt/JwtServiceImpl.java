@@ -22,19 +22,41 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
-import lombok.RequiredArgsConstructor;
 
-@RequiredArgsConstructor
 public class JwtServiceImpl implements JwtService {
 
-    private final String secret;
-    private final Long expiration;
+    private String secret;
+    private String issuer;
+    private Long expiration;
+    private Long refreshExpiration;
 
     private static final String AUTHORITIES = "authorities";
     private static final String ACCOUNT_ENABLED = "accountEnabled";
     private static final String ACCOUNT_NON_EXPIRED = "accountNonExpired";
     private static final String CREDENTIALS_NON_EXPIRED = "credentialsNonExpired";
     private static final String ACCOUNT_NON_LOCKED = "accountNonLocked";
+
+
+    public JwtServiceImpl(String secret, String issuer) {
+      this.secret = secret;
+      this.issuer = issuer;
+      this.expiration = 1000L * 60 * 60 * 24;
+      this.refreshExpiration = 1000L * 60 * 60 * 24 * 15;
+    }
+
+    public JwtServiceImpl(String secret, Long expiration, String issuer) {
+        this.secret = secret;
+        this.expiration = expiration;
+        this.refreshExpiration = expiration;
+        this.issuer = issuer;
+    }
+
+    public JwtServiceImpl(String secret, Long expiration, Long refreshExpiration, String issuer) {
+        this.secret = secret;
+        this.expiration = expiration;
+        this.refreshExpiration = refreshExpiration;
+        this.issuer = issuer;
+    }
 
     @Override
     public UserDetails extractUserDetails(String token) {
@@ -49,7 +71,8 @@ public class JwtServiceImpl implements JwtService {
         @SuppressWarnings("unchecked")
         List<String> authorityList = (List<String>) claims.get(AUTHORITIES, List.class);
         List<SimpleGrantedAuthority> authorities = authorityList.stream().map(SimpleGrantedAuthority::new).toList();
-        return new User(userId, "no_password", enabled, accountNonExpired, credentialsNonExpired, accountNonLocked, authorities);
+        return new User(userId, "no_password", enabled, accountNonExpired, credentialsNonExpired, accountNonLocked,
+                authorities);
     }
 
     @Override
@@ -57,14 +80,13 @@ public class JwtServiceImpl implements JwtService {
         return extractExpiration(token).before(new Date());
     }
 
-
-
     @Override
-    public String generateToken(String userId, Collection<? extends GrantedAuthority> grantedAuthorities, Map<String, Object> extraPayload) {
+    public String generateToken(String userId, Collection<? extends GrantedAuthority> grantedAuthorities,
+            Map<String, Object> extraPayload) {
         Map<String, Object> extraClaims = new HashMap<>();
 
         List<String> authorities = getAuthorities(grantedAuthorities);
-     
+
         extraClaims.put(AUTHORITIES, authorities);
         extraClaims.put(ACCOUNT_ENABLED, true);
         extraClaims.put(ACCOUNT_NON_EXPIRED, true);
@@ -72,17 +94,17 @@ public class JwtServiceImpl implements JwtService {
         extraClaims.put(ACCOUNT_NON_LOCKED, true);
 
         if (Objects.isNull(extraPayload) || extraPayload.isEmpty()) {
-            return createToken(userId, extraClaims);
+            return buildToken(userId, extraClaims, expiration);
         }
         extraPayload.keySet().forEach(eachKey -> extraClaims.put(eachKey, extraPayload.get(eachKey)));
-        
-        return createToken(userId, extraClaims);
+
+        return buildToken(userId, extraClaims, expiration);
     }
 
     @Override
     public String generateToken(UserDetails userDetails) {
         return generateToken(userDetails, new HashMap<>());
-        
+
     }
 
     @Override
@@ -97,12 +119,17 @@ public class JwtServiceImpl implements JwtService {
         extraPayload.put(ACCOUNT_NON_LOCKED, userDetails.isAccountNonLocked());
 
         extraClaims.keySet().forEach(eachKey -> extraPayload.put(eachKey, extraClaims.get(eachKey)));
-        return createToken(userDetails.getUsername(), extraPayload);
+        return buildToken(userDetails.getUsername(), extraPayload,expiration);
     }
 
     @Override
     public String generateToken(String userId) {
         return generateToken(userId, List.of(new SimpleGrantedAuthority("ROLE_USER")), new HashMap<>());
+    }
+
+    @Override
+    public String grenerateRefreshToken(String userId) {
+        return buildToken(userId, new HashMap<>(), refreshExpiration);
     }
 
     private static List<String> getAuthorities(Collection<? extends GrantedAuthority> authorities) {
@@ -125,12 +152,13 @@ public class JwtServiceImpl implements JwtService {
         return hexString.toString().toUpperCase();
     }
 
-    private String createToken(String username, Map<String, Object> claims) {
+    private String buildToken(String userId, Map<String, Object> claims, Long expiredAfter) {
         return Jwts.builder()
                 .setClaims(claims)
-                .setSubject(username)
+                .setIssuer(issuer)
+                .setSubject(userId)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + expiration))
+                .setExpiration(new Date(System.currentTimeMillis() + expiredAfter))
                 .signWith(getSignKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
@@ -157,7 +185,4 @@ public class JwtServiceImpl implements JwtService {
         return extractClaim(token, Claims::getExpiration);
     }
 
-   
-
-   
 }

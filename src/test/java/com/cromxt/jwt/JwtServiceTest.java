@@ -28,7 +28,7 @@ public class JwtServiceTest {
 
   @BeforeAll
   void setup() {
-    jwtService = new JwtServiceImpl("B6AFCFCEB79CC14F921AEFD342D48645F43EA2C9E0B1701D3F6A0AE832388FEB", 86400000L);
+    jwtService = new JwtServiceImpl("B6AFCFCEB79CC14F921AEFD342D48645F43EA2C9E0B1701D3F6A0AE832388FEB", 86400000L, "test.cromxt.com");
     List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"),
         new SimpleGrantedAuthority("user:read"));
     userDetails = new User("test", "password", getResult(), getResult(), getResult(), getResult(), authorities);
@@ -53,6 +53,8 @@ public class JwtServiceTest {
   @Test
   void createTokenFromUserDetails() {
     String token = jwtService.generateToken(userDetails);
+    
+    System.out.println(token);
 
     UserDetails extractUser = jwtService.extractUserDetails(token);
 
