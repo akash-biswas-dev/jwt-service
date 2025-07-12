@@ -19,7 +19,7 @@ public interface JwtService {
 
     String generateToken(UserDetails userDetails);
 
-    String grenerateRefreshToken(String userId);
+    String generateRefreshToken(String userId);
 
     boolean isTokenExpired(String token);
 }

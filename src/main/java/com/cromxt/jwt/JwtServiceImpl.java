@@ -128,7 +128,7 @@ public class JwtServiceImpl implements JwtService {
     }
 
     @Override
-    public String grenerateRefreshToken(String userId) {
+    public String generateRefreshToken(String userId) {
         return buildToken(userId, new HashMap<>(), refreshExpiration);
     }
 
