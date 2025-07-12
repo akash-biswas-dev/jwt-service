@@ -1,21 +1,28 @@
 package com.cromxt.jwt;
 
+import java.nio.charset.StandardCharsets;
+import java.security.Key;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Collection;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-
-import java.nio.charset.StandardCharsets;
-import java.security.Key;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.*;
-import java.util.function.Function;
 
 @RequiredArgsConstructor
 public class JwtServiceImpl implements JwtService {
@@ -24,21 +31,25 @@ public class JwtServiceImpl implements JwtService {
     private final Long expiration;
 
     private static final String AUTHORITIES = "authorities";
+    private static final String ACCOUNT_ENABLED = "accountEnabled";
+    private static final String ACCOUNT_NON_EXPIRED = "accountNonExpired";
+    private static final String CREDENTIALS_NON_EXPIRED = "credentialsNonExpired";
+    private static final String ACCOUNT_NON_LOCKED = "accountNonLocked";
 
     @Override
     public UserDetails extractUserDetails(String token) {
         Claims claims = extractAllClaims(token);
         String userId = claims.getSubject();
+
+        boolean enabled = claims.get(ACCOUNT_ENABLED, Boolean.class);
+        boolean accountNonExpired = claims.get(ACCOUNT_NON_EXPIRED, Boolean.class);
+        boolean credentialsNonExpired = claims.get(CREDENTIALS_NON_EXPIRED, Boolean.class);
+        boolean accountNonLocked = claims.get(ACCOUNT_NON_LOCKED, Boolean.class);
+
         @SuppressWarnings("unchecked")
-        List<String> authorityList = (List<String>) claims.get(AUTHORITIES,List.class);
+        List<String> authorityList = (List<String>) claims.get(AUTHORITIES, List.class);
         List<SimpleGrantedAuthority> authorities = authorityList.stream().map(SimpleGrantedAuthority::new).toList();
-        return User.builder()
-                .username(userId)
-                .password("no_password")
-                .authorities(authorities)
-                .accountExpired(false)
-                .accountLocked(false)
-                .build();
+        return new User(userId, "no_password", enabled, accountNonExpired, credentialsNonExpired, accountNonLocked, authorities);
     }
 
     @Override
@@ -46,19 +57,58 @@ public class JwtServiceImpl implements JwtService {
         return extractExpiration(token).before(new Date());
     }
 
-    @Override
-    public String generateToken(String userId, List<String> authorities, Map<String, Object> extraPayload) {
-        Map<String,Object> extraClaims = new HashMap<>();
-        extraClaims.put(AUTHORITIES,authorities);
 
-        if(Objects.isNull(extraPayload) || extraPayload.isEmpty()){
-            return createToken(userId,extraClaims);
+
+    @Override
+    public String generateToken(String userId, Collection<? extends GrantedAuthority> grantedAuthorities, Map<String, Object> extraPayload) {
+        Map<String, Object> extraClaims = new HashMap<>();
+
+        List<String> authorities = getAuthorities(grantedAuthorities);
+     
+        extraClaims.put(AUTHORITIES, authorities);
+        extraClaims.put(ACCOUNT_ENABLED, true);
+        extraClaims.put(ACCOUNT_NON_EXPIRED, true);
+        extraClaims.put(CREDENTIALS_NON_EXPIRED, true);
+        extraClaims.put(ACCOUNT_NON_LOCKED, true);
+
+        if (Objects.isNull(extraPayload) || extraPayload.isEmpty()) {
+            return createToken(userId, extraClaims);
         }
-        extraPayload.keySet().forEach(eachKey->extraClaims.put(eachKey,extraPayload.get(eachKey)));
-        return createToken(userId,extraClaims);
+        extraPayload.keySet().forEach(eachKey -> extraClaims.put(eachKey, extraPayload.get(eachKey)));
+        
+        return createToken(userId, extraClaims);
     }
 
-    
+    @Override
+    public String generateToken(UserDetails userDetails) {
+        return generateToken(userDetails, new HashMap<>());
+        
+    }
+
+    @Override
+    public String generateToken(UserDetails userDetails, Map<String, Object> extraClaims) {
+        Map<String, Object> extraPayload = new HashMap<>();
+
+        List<String> authorities = getAuthorities(userDetails.getAuthorities());
+        extraPayload.put(AUTHORITIES, authorities);
+        extraPayload.put(ACCOUNT_ENABLED, userDetails.isEnabled());
+        extraPayload.put(ACCOUNT_NON_EXPIRED, userDetails.isAccountNonExpired());
+        extraPayload.put(CREDENTIALS_NON_EXPIRED, userDetails.isCredentialsNonExpired());
+        extraPayload.put(ACCOUNT_NON_LOCKED, userDetails.isAccountNonLocked());
+
+        extraClaims.keySet().forEach(eachKey -> extraPayload.put(eachKey, extraClaims.get(eachKey)));
+        return createToken(userDetails.getUsername(), extraPayload);
+    }
+
+    @Override
+    public String generateToken(String userId) {
+        return generateToken(userId, List.of(new SimpleGrantedAuthority("ROLE_USER")), new HashMap<>());
+    }
+
+    private static List<String> getAuthorities(Collection<? extends GrantedAuthority> authorities) {
+        return authorities.stream().map(GrantedAuthority::getAuthority).toList();
+    }
+
     public String generateSecret(String id) throws NoSuchAlgorithmException {
         MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
         String data = String.format("%s-%s-%s", id, secret, System.currentTimeMillis());
@@ -72,7 +122,7 @@ public class JwtServiceImpl implements JwtService {
             }
             hexString.append(hex);
         }
-        return hexString.toString();
+        return hexString.toString().toUpperCase();
     }
 
     private String createToken(String username, Map<String, Object> claims) {
@@ -97,12 +147,17 @@ public class JwtServiceImpl implements JwtService {
                 .parseClaimsJws(token)
                 .getBody();
     }
+
     private <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
-    private Date extractExpiration(String token){
+    private Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
     }
+
+   
+
+   
 }

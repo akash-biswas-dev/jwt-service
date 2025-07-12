@@ -1,16 +1,23 @@
 package com.cromxt.jwt;
 
-
-import org.springframework.security.core.userdetails.UserDetails;
-
-import java.util.List;
+import java.util.Collection;
 import java.util.Map;
+
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
 public interface JwtService {
 
     UserDetails extractUserDetails(String token);
 
-    String generateToken(String userId, List<String> authorities, Map<String, Object> extraPayload);
+    String generateToken(String userId, Collection<? extends GrantedAuthority> authorities,
+            Map<String, Object> extraPayload);
+
+    String generateToken(UserDetails userDetails, Map<String, Object> extraPayload);
+
+    String generateToken(String userId);
+
+    String generateToken(UserDetails userDetails);
 
     boolean isTokenExpired(String token);
 }
