@@ -22,4 +22,6 @@ public interface JwtService {
     String generateRefreshToken(String userId);
 
     boolean isTokenExpired(String token);
+
+    default Long getRefreshTokenExpiration() { return 1000L * 60 * 60 * 24 * 15; } // 15 days()
 }

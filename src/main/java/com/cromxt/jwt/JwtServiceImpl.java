@@ -132,6 +132,8 @@ public class JwtServiceImpl implements JwtService {
         return buildToken(userId, new HashMap<>(), refreshExpiration);
     }
 
+    @Override
+    public Long getRefreshTokenExpiration() { return refreshExpiration; }
     private static List<String> getAuthorities(Collection<? extends GrantedAuthority> authorities) {
         return authorities.stream().map(GrantedAuthority::getAuthority).toList();
     }
